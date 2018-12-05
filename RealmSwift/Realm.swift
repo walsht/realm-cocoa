@@ -280,11 +280,14 @@ public final class Realm {
      - parameter update: If `true`, the Realm will try to find an existing copy of the object (with the same primary
                          key), and update it. Otherwise, the object will be added.
      */
-    public func add(_ object: Object, update: Bool = false) {
-        if update && object.objectSchema.primaryKeyProperty == nil {
+    public func add(_ object: Object, update: Bool) {
+        add(object, update: update ? .all : .error)
+    }
+    public func add(_ object: Object, update: UpdatePolicy = .error) {
+        if update != .error && object.objectSchema.primaryKeyProperty == nil {
             throwRealmException("'\(object.objectSchema.className)' does not have a primary key and can not be updated")
         }
-        RLMAddObjectToRealm(object, rlmRealm, update)
+        RLMAddObjectToRealm(object, rlmRealm, RLMUpdatePolicy(rawValue: UInt(update.rawValue))!)
     }
 
     /**
@@ -297,7 +300,12 @@ public final class Realm {
      - parameter objects: A sequence which contains objects to be added to the Realm.
      - parameter update: If `true`, objects that are already in the Realm will be updated instead of added anew.
      */
-    public func add<S: Sequence>(_ objects: S, update: Bool = false) where S.Iterator.Element: Object {
+    public func add<S: Sequence>(_ objects: S, update: Bool) where S.Iterator.Element: Object {
+        for obj in objects {
+            add(obj, update: update)
+        }
+    }
+    public func add<S: Sequence>(_ objects: S, update: UpdatePolicy = .error) where S.Iterator.Element: Object {
         for obj in objects {
             add(obj, update: update)
         }
@@ -339,12 +347,24 @@ public final class Realm {
      - returns: The newly created object.
      */
     @discardableResult
-    public func create<T: Object>(_ type: T.Type, value: Any = [:], update: Bool = false) -> T {
+    public func create<T: Object>(_ type: T.Type, value: Any = [:], update: Bool) -> T {
+        return create(type, value: value, update: update ? .all : .error)
+    }
+
+    public enum UpdatePolicy: Int {
+        case error = 0
+        case changed = 1
+        case all = 2
+    }
+
+    @discardableResult
+    public func create<T: Object>(_ type: T.Type, value: Any = [:], update: UpdatePolicy = .error) -> T {
         let typeName = (type as Object.Type).className()
-        if update && schema[typeName]?.primaryKeyProperty == nil {
+        if update != .error && schema[typeName]?.primaryKeyProperty == nil {
             throwRealmException("'\(typeName)' does not have a primary key and can not be updated")
         }
-        return unsafeDowncast(RLMCreateObjectInRealmWithValue(rlmRealm, typeName, value, update), to: T.self)
+        return unsafeDowncast(RLMCreateObjectInRealmWithValue(rlmRealm, typeName, value,
+                                                              RLMUpdatePolicy(rawValue: UInt(update.rawValue))!), to: T.self)
     }
 
     /**
@@ -387,11 +407,17 @@ public final class Realm {
      :nodoc:
      */
     @discardableResult
-    public func dynamicCreate(_ typeName: String, value: Any = [:], update: Bool = false) -> DynamicObject {
-        if update && schema[typeName]?.primaryKeyProperty == nil {
+    public func dynamicCreate(_ typeName: String, value: Any = [:], update: Bool) -> DynamicObject {
+        return dynamicCreate(typeName, value: value, update: update ? .all : .error)
+    }
+
+    @discardableResult
+    public func dynamicCreate(_ typeName: String, value: Any = [:], update: UpdatePolicy = .error) -> DynamicObject {
+        if update != .error && schema[typeName]?.primaryKeyProperty == nil {
             throwRealmException("'\(typeName)' does not have a primary key and can not be updated")
         }
-        return noWarnUnsafeBitCast(RLMCreateObjectInRealmWithValue(rlmRealm, typeName, value, update),
+        return noWarnUnsafeBitCast(RLMCreateObjectInRealmWithValue(rlmRealm, typeName, value,
+                                                                   RLMUpdatePolicy(rawValue: UInt(update.rawValue))!),
                                    to: DynamicObject.self)
     }
 
